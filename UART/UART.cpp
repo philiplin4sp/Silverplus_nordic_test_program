@@ -1,142 +1,129 @@
-#include<stdafx.h>
+#include "stdafx.h"
 
 #include <stdio.h>
-#include <string.h>
-#include <windows.h>
 #include <conio.h>
+#include <string.h>
 
-HANDLE hSerialIn = INVALID_HANDLE_VALUE;
-DCB config = {0};
-DWORD WINAPI GetLastError(void);
-LPCWSTR lpFileName;
-long	lLastError = ERROR_SUCCESS;
-char	portIn[16];
-char	lastError[1024],buf1[100];
-int		ReadUart(int len,HANDLE);
+#define STRICT
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+void system_error(char *name) {
+  // Retrieve, format, and print out a message from the last error.  The 
+  // `name' that's passed should be in the form of a present tense noun 
+  // (phrase) such as "opening file".
+  //
+  //char *ptr = NULL;
+  WCHAR ptr[1024];
+  FormatMessage(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER |
+        FORMAT_MESSAGE_FROM_SYSTEM,
+        0,
+        GetLastError(),
+        0,
+        //(char *)&ptr,
+        ptr,
+        1024,
+        NULL);
+
+  //fprintf(stderr, "\nError %s: %s\n", name, ptr);
+  fprintf(stderr, "\nError %s: %s\n", name, &ptr);
+  LocalFree(ptr);
+}
 
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	sprintf(portIn,"COM4:");
-	lpFileName = (LPCWSTR)portIn;
-	printf("lpFileName: %s\n", lpFileName);
-
-	hSerialIn = CreateFile(_T("COM4"),
-		GENERIC_READ | GENERIC_WRITE, 
-		0, 
-		NULL,
-		OPEN_EXISTING,
-		FILE_ATTRIBUTE_NORMAL, 
-		NULL); 
-
-	if(hSerialIn==INVALID_HANDLE_VALUE)
-	{
-		if(GetLastError()==ERROR_FILE_NOT_FOUND)
-		{
-			printf("\nError: \nThe system cannot find the file specified (%s)\n",portIn);		//error code 0x02
-		}
-		else if(GetLastError()==ERROR_INVALID_NAME)
-		{
-			printf("\nError: \n%s 'filename, directory name, or volume label syntax is incorrect'\n",portIn);		//error code 0x7B
-		}
-		else
-		{
-			printf("\nHandle creation error code: %x\n", GetLastError());
-		}
-		puts("\t...CreateFile returned an invalid handle value");
-	}
-  config.DCBlength = sizeof(config);
 
 
-    if((GetCommState(hSerialIn, &config) == 0))
-    {
-        printf("Get configuration port has a problem.");
-        return FALSE;
+  int ch;
+  char buffer[1];
+  HANDLE file;
+  COMMTIMEOUTS timeouts;
+  DWORD read, written;
+  DCB port;
+  HANDLE keyboard = GetStdHandle(STD_INPUT_HANDLE);
+  HANDLE screen = GetStdHandle(STD_OUTPUT_HANDLE);
+  DWORD mode;
+  //char port_name[128] = "\\\\.\\COM3";
+  LPCWSTR port_name = L"\\\\.\\COM4";
+  char init[] = ""; // e.g., "ATZ" to completely reset a modem.
+
+  if ( argc > 2 )
+    swprintf_s((wchar_t *)&port_name, 128,L"\\\\.\\COM%c", argv[1][0]);
+  //sprintf(port_name, "\\\\.\\COM%c", argv[1][0]);
+
+  // open the comm port.
+  file = CreateFile(port_name,
+            GENERIC_READ | GENERIC_WRITE,
+            0, 
+            NULL, 
+            OPEN_EXISTING,
+            0,
+            NULL);
+
+  if ( INVALID_HANDLE_VALUE == file) {
+    system_error("opening file");
+    return 1;
+  }
+
+  // get the current DCB, and adjust a few bits to our liking.
+  memset(&port, 0, sizeof(port));
+  port.DCBlength = sizeof(port);
+  if ( !GetCommState(file, &port))
+    system_error("getting comm state");
+
+  if (!BuildCommDCB(L"baud=115200 parity=n data=8 stop=1", &port))
+    system_error("building comm DCB");
+  if (!SetCommState(file, &port))
+    system_error("adjusting port settings");
+
+  // set short timeouts on the comm port.
+  timeouts.ReadIntervalTimeout = 1;
+  timeouts.ReadTotalTimeoutMultiplier = 1;
+  timeouts.ReadTotalTimeoutConstant = 1;
+  timeouts.WriteTotalTimeoutMultiplier = 1;
+  timeouts.WriteTotalTimeoutConstant = 1;
+  if (!SetCommTimeouts(file, &timeouts))
+    system_error("setting port time-outs.");
+
+  // set keyboard to raw reading.
+  if (!GetConsoleMode(keyboard, &mode))
+    system_error("getting keyboard mode");
+  mode &= ~ ENABLE_PROCESSED_INPUT;
+  if (!SetConsoleMode(keyboard, mode))
+    system_error("setting keyboard mode");
+
+  if (!EscapeCommFunction(file, CLRDTR))
+    system_error("clearing DTR");
+  Sleep(200);
+  if (!EscapeCommFunction(file, SETDTR))
+    system_error("setting DTR");
+
+  if ( !WriteFile(file, init, sizeof(init), &written, NULL))
+    system_error("writing data to port");
+
+  if (written != sizeof(init))
+    system_error("not all data written to port");
+
+  // basic terminal loop:
+  do {
+    // check for data on port and display it on screen.
+    ReadFile(file, buffer, sizeof(buffer), &read, NULL);
+    if ( read )
+      WriteFile(screen, buffer, read, &written, NULL);
+
+    // check for keypress, and write any out the port.
+    if ( kbhit() ) {
+      ch = getch();
+      WriteFile(file, &ch, 1, &written, NULL);
     }
+    // until user hits ctrl-backspace.
+  } while ( ch != 127);
 
-    config.BaudRate = 115200;
-    config.StopBits = ONESTOPBIT;
-    config.Parity = PARITY_NONE; 
-    config.ByteSize = DATABITS_8;
-    config.fDtrControl = 0;
-    config.fRtsControl = 0;
+  // close up and go home.
+  CloseHandle(keyboard);
+  CloseHandle(file);
 
-    if (!SetCommState(hSerialIn, &config))
-    {
-
-        printf( "Failed to Set Comm State Reason: %d\n",GetLastError());
-        //return E_FAIL;
-    }
-
-    printf("Current Settings\n Baud Rate %d\n Parity %d\n Byte Size %d\n Stop Bits %d", config.BaudRate, 
-        config.Parity, config.ByteSize, config.StopBits);
-
-
-
-	while(1){
-		int len = ReadUart(sizeof(buf1), hSerialIn);
-		/*
-		for (int i =0; i < len; i++)
-		{
-			printf("%c", buf1[i]);	
-		}
-		*/
-	}
-	CloseHandle(hSerialIn);
-	
-	puts("\npress any key to exit...");
-	getchar();
-
-	return 1;
+  return 0;
 }
-int ReadUart(int len, HANDLE hPort)
-{
-	BOOL ret;
-	DWORD dwRead;
-    BOOL fWaitingOnRead = FALSE;
-    OVERLAPPED osReader = {0};
-    unsigned long retlen=0;
-
-   // Create the overlapped event. Must be closed before exiting to avoid a handle leak.
-
-   osReader.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-   if (osReader.hEvent == NULL)
-       MessageBox (NULL, L"Error in creating Overlapped event" ,L"Error", MB_OK);
-   if (!fWaitingOnRead)
-   {
-          if (!ReadFile(hPort, buf2, len, &dwRead,  &osReader)) 
-
-          {
-			
-          FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                        NULL,
-                        GetLastError(),
-                        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                        (LPWSTR)lastError,
-                        1024,
-                        NULL);
-		   MessageBox (NULL, (LPWSTR)lastError ,L"MESSAGE", MB_OK);
-            
-           }
-           else
-		   {
-             
-	          //MessageBox (NULL, L"ReadFile Suceess" ,L"Success", MB_OK);
-           }
-        
-    }
-
-
-
- 
-	
-	if(dwRead > 0)	
-	{
-		//MessageBox (NULL, L"Read DATA Success" ,L"Success", MB_OK);//If we have data
-		printf("%d\n", retlen);
-		return (int) retlen;
-	}
-	     //return the length
-    
-	else return 0;     //else no data has been read
- }
