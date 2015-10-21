@@ -1,0 +1,2 @@
+http://bytes.com/topic/c/answers/850941-createfile-windows-com1
+http://stackoverflow.com/questions/6036716/serial-comm-using-writefile-readfile
