@@ -7,6 +7,19 @@
 #define STRICT
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <string>
+using namespace std;
+
+typedef struct{
+   char* keyword;
+   int   kw_size;
+   int   index;
+   int   match;
+}keyword_info; 
+
+int SquenceKeywordStrCmp(keyword_info* kw_info, int kw_amount, char char_in);
+int AddNewKeyword(keyword_info* kw_info, int index, char* keyword, int kw_size);
+
 
 void system_error(char *name) {
   // Retrieve, format, and print out a message from the last error.  The 
@@ -34,8 +47,7 @@ void system_error(char *name) {
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-
-
+   
   int ch;
   char buffer[1];
   HANDLE file;
@@ -48,6 +60,10 @@ int _tmain(int argc, _TCHAR* argv[])
   //char port_name[128] = "\\\\.\\COM3";
   LPCWSTR port_name = L"\\\\.\\COM4";
   char init[] = ""; // e.g., "ATZ" to completely reset a modem.
+
+  keyword_info kw[10];
+  AddNewKeyword(kw, 0, "Linux", 5);
+  AddNewKeyword(kw, 1, "Arch", 3);
 
   if ( argc > 2 )
     swprintf_s((wchar_t *)&port_name, 128,L"\\\\.\\COM%c", argv[1][0]);
@@ -110,12 +126,19 @@ int _tmain(int argc, _TCHAR* argv[])
   do {
     // check for data on port and display it on screen.
     ReadFile(file, buffer, sizeof(buffer), &read, NULL);
-    if ( read )
-      WriteFile(screen, buffer, read, &written, NULL);
-
+    if ( read ){
+       
+       //printf("%d", read);
+       for (DWORD i = 0; i < read; i++){
+         printf("%c", buffer[i]);
+         SquenceKeywordStrCmp(kw, 2, buffer[i]);
+       }
+       
+       //WriteFile(screen, buffer, read, &written, NULL);
+    }
     // check for keypress, and write any out the port.
-    if ( kbhit() ) {
-      ch = getch();
+    if ( _kbhit() ) {
+      ch = _getch();
       WriteFile(file, &ch, 1, &written, NULL);
     }
     // until user hits ctrl-backspace.
@@ -126,4 +149,45 @@ int _tmain(int argc, _TCHAR* argv[])
   CloseHandle(file);
 
   return 0;
+}
+
+int AddNewKeyword(keyword_info* kw_info, int index, char* keyword, int kw_size)
+{
+   kw_info[index].keyword = (char*) malloc(kw_size);
+   if (NULL == kw_info[index].keyword){
+      printf("Fail to add new keyword\n");
+   } else {
+      //printf("%p\n", kw_info[index].keyword);
+      strcpy(kw_info[index].keyword, keyword);
+      //printf("%p\n", kw_info[index].keyword);
+      //printf("%c\n", kw_info[index].keyword[1]);
+   }
+
+   kw_info[index].keyword = keyword;
+   kw_info[index].kw_size = kw_size;
+   kw_info[index].match = 0;
+   kw_info[index].index = 0;
+
+   return 0;
+}
+int SquenceKeywordStrCmp(keyword_info* kw_info, int kw_amount, char char_in)
+{
+   static int index = 0;
+   int i = 0;
+   for (;i < kw_amount; i++){
+      // compare string 
+      if (kw_info[i].keyword[kw_info[i].index] == char_in){
+         ++kw_info[i].index;
+         // match keyword
+         if (kw_info[i].index >= kw_info[i].kw_size){
+            kw_info[i].match = 1;
+            kw_info[i].index = 0;
+            printf("[Match]");
+         }
+      } else {
+         kw_info[i].index = 0;
+      }
+   }
+   
+   return 0;
 }

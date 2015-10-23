@@ -5,19 +5,9 @@ Debug/UART.pdb
 
 Debug/UART.ilk
 
-UART.suo
-
-UART.ncb
-
-UART.suo
-
 UART/Debug/BuildLog.htm
 
 UART/Debug/mt.dep
-
-UART.suo
-
-UART.suo
 
 UART/Debug/stdafx.obj
 
@@ -36,3 +26,23 @@ UART/Debug/vc90.pdb
 UART/Debug/vc90.idb
 
 UART/UART.vcproj.Philip-PC.Philip.user
+
+Release/UART.exe
+
+Release/UART.pdb
+
+UART/Release/BuildLog.htm
+
+UART/Release/stdafx.obj
+
+UART/Release/mt.dep
+
+UART/Release/UART.exe.intermediate.manifest
+
+UART/Release/UART.obj
+
+UART/Release/UART.pch
+
+UART/Release/vc90.idb
+
+UART/Release/vc90.pdb
